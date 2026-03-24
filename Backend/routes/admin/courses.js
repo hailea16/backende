@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Course = require('../../models/Course');
 const Chapter = require('../../models/Chapter');
+const sequelize = require('../../config/sequelize');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -31,10 +32,12 @@ const upload = multer({
   },
 });
 
+const toPlain = (model) => (model ? model.get({ plain: true }) : null);
+
 router.get('/', async (req, res) => {
   try {
     const courses = await Course.findAll({ order: [['createdAt', 'DESC']] });
-    res.json(courses.map((c) => c.toObject()));
+    res.json(courses.map(toPlain));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -54,7 +57,7 @@ router.post('/', async (req, res) => {
       createdBy: req.user.id,
     });
 
-    res.status(201).json(course.toObject());
+    res.status(201).json(toPlain(course));
   } catch (err) {
     console.error('Create course error:', err);
     res.status(500).json({ message: err.message });
@@ -72,7 +75,7 @@ router.put('/:id', async (req, res) => {
     if (isPublished !== undefined) course.isPublished = !!isPublished;
 
     await course.save();
-    res.json(course.toObject());
+    res.json(toPlain(course));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -84,26 +87,38 @@ router.delete('/:id', async (req, res) => {
     if (!course) return res.status(404).json({ message: 'Course not found' });
 
     const chapters = await Chapter.findAll({ where: { courseId: course._id } });
-    for (const chapter of chapters) {
-      const files = Array.isArray(chapter.files) ? chapter.files : [];
-      if (files.length) {
-        await Promise.all(
-          files.map(async (file) => {
-            const filePath = path.join(uploadDir, file.filename);
-            if (fs.existsSync(filePath)) {
-              try {
-                await fs.promises.unlink(filePath);
-              } catch (err) {
-                console.error('Failed to delete file:', file.filename, err);
-              }
-            }
-          }),
-        );
-      }
-      await chapter.deleteOne();
-    }
+    const filenames = chapters.flatMap((chapter) =>
+      Array.isArray(chapter.files)
+        ? chapter.files
+            .map((file) => file?.filename)
+            .filter((filename) => typeof filename === 'string' && filename.trim())
+        : [],
+    );
 
-    await course.deleteOne();
+    await sequelize.transaction(async (transaction) => {
+      await Chapter.destroy({
+        where: { courseId: course._id },
+        transaction,
+      });
+
+      await Course.destroy({
+        where: { _id: course._id },
+        transaction,
+      });
+    });
+
+    await Promise.all(
+      filenames.map(async (filename) => {
+        const filePath = path.join(uploadDir, filename);
+        if (!fs.existsSync(filePath)) return;
+
+        try {
+          await fs.promises.unlink(filePath);
+        } catch (err) {
+          console.error('Failed to delete file:', filename, err);
+        }
+      }),
+    );
     res.json({ message: 'Course and its chapters deleted successfully' });
   } catch (err) {
     console.error('Delete course error:', err);
@@ -117,7 +132,7 @@ router.get('/:courseId/chapters', async (req, res) => {
       where: { courseId: req.params.courseId },
       order: [['order', 'ASC']],
     });
-    res.json(chapters.map((c) => c.toObject()));
+    res.json(chapters.map(toPlain));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -150,7 +165,7 @@ router.post('/:courseId/chapters', async (req, res) => {
       files: [],
     });
 
-    res.status(201).json(chapter.toObject());
+    res.status(201).json(toPlain(chapter));
   } catch (err) {
     console.error('Create chapter error:', err);
     res.status(500).json({ message: err.message });
@@ -169,7 +184,7 @@ router.put('/chapters/:id', async (req, res) => {
     if (videoUrl !== undefined) chapter.videoUrl = `${videoUrl}`.trim();
 
     await chapter.save();
-    res.json(chapter.toObject());
+    res.json(toPlain(chapter));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -196,7 +211,7 @@ router.delete('/chapters/:id', async (req, res) => {
       );
     }
 
-    await chapter.deleteOne();
+    await chapter.destroy();
     res.json({ message: 'Chapter deleted successfully' });
   } catch (err) {
     console.error('Delete chapter error:', err);
@@ -261,7 +276,7 @@ router.delete('/chapters/:chapterId/files/:filename', async (req, res) => {
       }
     }
 
-    res.json({ message: 'File removed successfully', chapter: chapter.toObject() });
+    res.json({ message: 'File removed successfully', chapter: toPlain(chapter) });
   } catch (err) {
     console.error('Delete chapter file error:', err);
     res.status(500).json({ message: 'Failed to delete chapter file' });
@@ -269,4 +284,3 @@ router.delete('/chapters/:chapterId/files/:filename', async (req, res) => {
 });
 
 module.exports = router;
-
