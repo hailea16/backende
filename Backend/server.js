@@ -16,11 +16,20 @@ const connectDB = require('./config/db');
 dotenv.config();
 const app = express();
 
-const allowedOrigins = [
-  'http://localhost:4000',
-  'https://api.nssse.edu.et',
-  process.env.FRONTEND_URL
-];
+const allowedOrigins = Array.from(
+  new Set(
+    [
+      'http://localhost:4000',
+      'http://127.0.0.1:4000',
+      'https://api.nssse.edu.et',
+      process.env.FRONTEND_URL,
+      ...(process.env.FRONTEND_URLS || '')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ].filter(Boolean),
+  ),
+);
 
 app.use(
   cors({
@@ -32,13 +41,12 @@ app.use(
       }
     },
     credentials: true,
-  })
+    optionsSuccessStatus: 200,
+  }),
 );
 
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-connectDB().catch((err) => console.error('❌ Database error:', err));
 
 app.get('/api/health', (req, res) => res.json({ status: 'OK' }));
 
@@ -50,4 +58,14 @@ app.use('/api/admin/courses', require('./routes/admin/courses'));
 app.use('/api/student', require('./routes/student'));
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
+const startServer = async () => {
+  try {
+    await connectDB();
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  } catch (error) {
+    process.exit(1);
+  }
+};
+
+startServer();

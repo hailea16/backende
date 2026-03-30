@@ -17,9 +17,9 @@ const ExamResult = sequelize.define(
     },
     user: { type: DataTypes.UUID, allowNull: true },
     exam: { type: DataTypes.UUID, allowNull: true },
-    answers: { type: DataTypes.JSONB, allowNull: true },
+    answers: { type: DataTypes.JSON, allowNull: true },
     score: { type: DataTypes.FLOAT, allowNull: true },
-    submissionFile: { type: DataTypes.JSONB, allowNull: true },
+    submissionFile: { type: DataTypes.JSON, allowNull: true },
   },
   { tableName: 'exam_results', timestamps: true },
 );
@@ -33,4 +33,3 @@ ExamResult.prototype.deleteOne = async function deleteOne() {
 };
 
 module.exports = ExamResult;
-

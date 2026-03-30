@@ -33,6 +33,52 @@ const upload = multer({
 });
 
 const toPlain = (model) => (model ? model.get({ plain: true }) : null);
+const toAbsoluteMediaUrl = (req, value, defaultFolder = 'chapters') => {
+  if (!value || typeof value !== 'string') return '';
+  if (/^(https?:|data:|blob:)/i.test(value)) return value;
+
+  const normalized = value.replace(/\\/g, '/').trim();
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+  if (normalized.startsWith('/')) {
+    return `${baseUrl}${normalized}`;
+  }
+
+  if (normalized.startsWith('uploads/')) {
+    return `${baseUrl}/${normalized}`;
+  }
+
+  if (normalized.startsWith(`${defaultFolder}/`)) {
+    return `${baseUrl}/uploads/${normalized}`;
+  }
+
+  return `${baseUrl}/uploads/${defaultFolder}/${normalized}`;
+};
+
+const normalizeChapterMedia = (req, chapter) => {
+  const plain = toPlain(chapter);
+  const files = Array.isArray(plain?.files) ? plain.files : [];
+
+  return {
+    ...plain,
+    videoUrl: toAbsoluteMediaUrl(req, plain?.videoUrl || '', 'chapters'),
+    files: files.map((file) => ({
+      ...file,
+      url: toAbsoluteMediaUrl(req, file?.url || file?.filename || '', 'chapters'),
+    })),
+  };
+};
+
+const parseBoolean = (value, fallback) => {
+  if (value === undefined) return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return Boolean(value);
+};
 
 router.get('/', async (req, res) => {
   try {
@@ -53,7 +99,7 @@ router.post('/', async (req, res) => {
     const course = await Course.create({
       title,
       description,
-      isPublished: req.body.isPublished !== undefined ? !!req.body.isPublished : true,
+      isPublished: parseBoolean(req.body.isPublished, true),
       createdBy: req.user.id,
     });
 
@@ -72,7 +118,7 @@ router.put('/:id', async (req, res) => {
 
     if (title) course.title = `${title}`.trim();
     if (description !== undefined) course.description = `${description}`.trim();
-    if (isPublished !== undefined) course.isPublished = !!isPublished;
+    if (isPublished !== undefined) course.isPublished = parseBoolean(isPublished, course.isPublished);
 
     await course.save();
     res.json(toPlain(course));
@@ -132,7 +178,7 @@ router.get('/:courseId/chapters', async (req, res) => {
       where: { courseId: req.params.courseId },
       order: [['order', 'ASC']],
     });
-    res.json(chapters.map(toPlain));
+    res.json(chapters.map((chapter) => normalizeChapterMedia(req, chapter)));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -160,12 +206,13 @@ router.post('/:courseId/chapters', async (req, res) => {
       title,
       textContent,
       videoUrl,
+      isPublished: parseBoolean(req.body.isPublished, true),
       order,
       createdBy: req.user.id,
       files: [],
     });
 
-    res.status(201).json(toPlain(chapter));
+    res.status(201).json(normalizeChapterMedia(req, chapter));
   } catch (err) {
     console.error('Create chapter error:', err);
     res.status(500).json({ message: err.message });
@@ -174,7 +221,7 @@ router.post('/:courseId/chapters', async (req, res) => {
 
 router.put('/chapters/:id', async (req, res) => {
   try {
-    const { title, textContent, content, videoUrl } = req.body;
+    const { title, textContent, content, videoUrl, isPublished } = req.body;
     const chapter = await Chapter.findByPk(req.params.id);
     if (!chapter) return res.status(404).json({ message: 'Chapter not found' });
 
@@ -182,9 +229,10 @@ router.put('/chapters/:id', async (req, res) => {
     if (textContent !== undefined) chapter.textContent = `${textContent}`.trim();
     else if (content !== undefined) chapter.textContent = `${content}`.trim();
     if (videoUrl !== undefined) chapter.videoUrl = `${videoUrl}`.trim();
+    if (isPublished !== undefined) chapter.isPublished = parseBoolean(isPublished, chapter.isPublished);
 
     await chapter.save();
-    res.json(toPlain(chapter));
+    res.json(normalizeChapterMedia(req, chapter));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -240,7 +288,13 @@ router.post('/chapters/:chapterId/files', upload.array('files', 10), async (req,
     chapter.files = [...existing, ...files];
     await chapter.save();
 
-    res.json({ files });
+    res.json({
+      files: files.map((file) => ({
+        ...file,
+        url: toAbsoluteMediaUrl(req, file.url, 'chapters'),
+      })),
+      chapter: normalizeChapterMedia(req, chapter),
+    });
   } catch (err) {
     if (req.files) req.files.forEach((f) => fs.unlink(f.path, () => {}));
     console.error('Upload files error:', err);
@@ -276,7 +330,7 @@ router.delete('/chapters/:chapterId/files/:filename', async (req, res) => {
       }
     }
 
-    res.json({ message: 'File removed successfully', chapter: toPlain(chapter) });
+    res.json({ message: 'File removed successfully', chapter: normalizeChapterMedia(req, chapter) });
   } catch (err) {
     console.error('Delete chapter file error:', err);
     res.status(500).json({ message: 'Failed to delete chapter file' });

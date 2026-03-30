@@ -21,7 +21,7 @@ const Course = sequelize.define(
     thumbnail: { type: DataTypes.STRING, allowNull: true },
     price: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
     isPublished: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
-    lessons: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
+    lessons: { type: DataTypes.JSON, allowNull: false },
     createdBy: { type: DataTypes.UUID, allowNull: true },
   },
   { tableName: 'courses', timestamps: true },
@@ -30,6 +30,12 @@ const Course = sequelize.define(
 Course.prototype.toObject = function toObject() {
   return this.get({ plain: true });
 };
+
+Course.addHook('beforeValidate', (course) => {
+  if (!Array.isArray(course.lessons)) {
+    course.lessons = [];
+  }
+});
 
 Course.prototype.deleteOne = async function deleteOne() {
   await this.destroy();

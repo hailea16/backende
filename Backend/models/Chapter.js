@@ -17,9 +17,10 @@ const Chapter = sequelize.define(
     },
     courseId: { type: DataTypes.UUID, allowNull: false },
     title: { type: DataTypes.STRING, allowNull: false },
-    textContent: { type: DataTypes.TEXT, allowNull: false, defaultValue: '' },
+    textContent: { type: DataTypes.TEXT, allowNull: false },
     videoUrl: { type: DataTypes.STRING, allowNull: false, defaultValue: '' },
-    files: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
+    files: { type: DataTypes.JSON, allowNull: false },
+    isPublished: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
     createdBy: { type: DataTypes.UUID, allowNull: false },
   },
@@ -34,9 +35,17 @@ Chapter.prototype.toObject = function toObject() {
   return this.get({ plain: true });
 };
 
+Chapter.addHook('beforeValidate', (chapter) => {
+  if (chapter.textContent == null) {
+    chapter.textContent = '';
+  }
+  if (!Array.isArray(chapter.files)) {
+    chapter.files = [];
+  }
+});
+
 Chapter.prototype.deleteOne = async function deleteOne() {
   await this.destroy();
 };
 
 module.exports = Chapter;
-

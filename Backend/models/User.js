@@ -47,7 +47,7 @@ const User = sequelize.define(
     lastLogin: { type: DataTypes.DATE, allowNull: true },
     loginAttempts: { type: DataTypes.INTEGER, defaultValue: 0 },
     lockUntil: { type: DataTypes.DATE, allowNull: true },
-    enrolledCourses: { type: DataTypes.JSONB, defaultValue: [] },
+    enrolledCourses: { type: DataTypes.JSON, allowNull: false },
     isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
     isLocked: {
       type: DataTypes.VIRTUAL,
@@ -63,6 +63,12 @@ const User = sequelize.define(
     indexes: [{ unique: true, fields: ['email'] }, { unique: true, fields: ['username'] }],
   },
 );
+
+User.addHook('beforeValidate', (user) => {
+  if (!Array.isArray(user.enrolledCourses)) {
+    user.enrolledCourses = [];
+  }
+});
 
 User.addHook('beforeSave', async (user) => {
   if (!user.changed('password')) return;
@@ -114,4 +120,3 @@ User.prototype.deleteOne = async function deleteOne() {
 };
 
 module.exports = User;
-

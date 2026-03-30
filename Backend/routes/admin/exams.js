@@ -5,6 +5,17 @@ const { adminAuth } = require('../../middleware/adminAuth');
 
 router.use(adminAuth);
 
+const parseBoolean = (value, fallback) => {
+  if (value === undefined) return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return Boolean(value);
+};
+
 const withCreatedBy = (exam) => {
   const plain = exam.toObject();
   const createdBy = exam.createdByUser ? exam.createdByUser.toObject() : undefined;
@@ -56,7 +67,7 @@ router.post('/', async (req, res) => {
       course,
       duration,
       questions,
-      isPublished: isPublished || false,
+      isPublished: parseBoolean(isPublished, false),
       createdBy: req.user._id,
     });
 
@@ -77,7 +88,7 @@ router.put('/:id', async (req, res) => {
     if (course !== undefined) exam.course = course;
     if (duration !== undefined) exam.duration = duration;
     if (questions !== undefined) exam.questions = questions;
-    if (isPublished !== undefined) exam.isPublished = isPublished;
+    if (isPublished !== undefined) exam.isPublished = parseBoolean(isPublished, exam.isPublished);
 
     await exam.save();
     res.json(exam.toObject());
@@ -98,4 +109,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
-
