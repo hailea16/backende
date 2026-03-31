@@ -20,7 +20,7 @@ const allowedOrigins = Array.from(
   new Set(
     [
 
-      'https://www.nssse.edu.et/',
+      'https://www.nssse.edu.et',
       process.env.FRONTEND_URL,
       ...(process.env.FRONTEND_URLS || '')
         .split(',')
@@ -30,20 +30,21 @@ const allowedOrigins = Array.from(
   ),
 );
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-    optionsSuccessStatus: 200,
-  }),
-);
+// app.use(
+//   cors({
+//     origin: function (origin, callback) {
+//       if (!origin || allowedOrigins.includes(origin)) {
+//         callback(null, true);
+//       } else {
+//         callback(new Error('Not allowed by CORS'));
+//       }
+//     },
+//     credentials: true,
+//     optionsSuccessStatus: 200,
+//   }),
+// );
 
+app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.get('/', (req, res) => res.json({ message: 'Welcome to the NSSSE API' }));
