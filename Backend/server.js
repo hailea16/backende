@@ -19,9 +19,8 @@ const app = express();
 const allowedOrigins = Array.from(
   new Set(
     [
-      'http://localhost:4000',
-      'http://127.0.0.1:4000',
-      'https://api.nssse.edu.et',
+
+      'https://www.nssse.edu.et/',
       process.env.FRONTEND_URL,
       ...(process.env.FRONTEND_URLS || '')
         .split(',')
