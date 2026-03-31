@@ -47,7 +47,7 @@ app.use(
 
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
+app.get('/addisu', (req, res) => res.json({ message: 'Welcome to the NSSSE API' }));
 app.get('/api/health', (req, res) => res.json({ status: 'OK' }));
 
 app.use('/api/auth', require('./routes/auth'));
