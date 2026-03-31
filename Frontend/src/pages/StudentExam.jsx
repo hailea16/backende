@@ -3,6 +3,14 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { studentAPI } from '../services/api';
 import toast from 'react-hot-toast';
 
+const normalizeQuestion = (question) => ({
+  ...question,
+  questionText: question?.questionText || question?.question || '',
+  options: Array.isArray(question?.options) ? question.options : [],
+  points: Number(question?.points) > 0 ? Number(question.points) : 1,
+  correctAnswer: typeof question?.correctAnswer === 'number' ? question.correctAnswer : -1,
+});
+
 const StudentExam = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -19,12 +27,17 @@ const StudentExam = () => {
 
   useEffect(() => {
     if (previewExam) {
-      setExam(previewExam);
+      setExam({
+        ...previewExam,
+        questions: Array.isArray(previewExam.questions)
+          ? previewExam.questions.map(normalizeQuestion)
+          : [],
+      });
       setTimeLeft((previewExam.duration || 0) * 60);
       return;
     }
     fetchExam();
-  }, []);
+  }, [id, previewExam]);
 
   const fetchExam = async () => {
     try {
@@ -36,14 +49,25 @@ const StudentExam = () => {
         return;
       }
 
-      setExam(examData);
+      setExam({
+        ...examData,
+        questions: Array.isArray(examData.questions)
+          ? examData.questions.map(normalizeQuestion)
+          : [],
+      });
       setTimeLeft((examData.duration || 0) * 60);
     } catch (err) {
       if (previewExam) {
-        setExam(previewExam);
+        setExam({
+          ...previewExam,
+          questions: Array.isArray(previewExam.questions)
+            ? previewExam.questions.map(normalizeQuestion)
+            : [],
+        });
         setTimeLeft((previewExam.duration || 0) * 60);
       } else {
-        toast.error("Failed to load exam");
+        toast.error('Failed to load exam');
+        navigate('/courses');
       }
     }
   };
@@ -79,17 +103,21 @@ const StudentExam = () => {
       return;
     }
 
+    let totalQuestions = 0;
+    let correctAnswers = 0;
     let total = 0;
     let earned = 0;
 
     exam.questions.forEach((q, i) => {
+      totalQuestions += 1;
       total += q.points;
       if (answers[i] === q.correctAnswer) {
+        correctAnswers += 1;
         earned += q.points;
       }
     });
 
-    setScore({ earned, total });
+    setScore({ earned, total, correctAnswers, totalQuestions });
     setSubmitted(true);
 
     if (!previewMode) {
@@ -121,8 +149,11 @@ const StudentExam = () => {
     return (
       <div className="max-w-3xl mx-auto p-10 text-center">
         <h1 className="text-3xl font-bold mb-4">Exam Finished</h1>
-        <p className="text-xl">
-          Score: {score.earned} / {score.total}
+        <p className="text-3xl font-bold text-blue-700 mb-3">
+          Result: {score.correctAnswers} / {score.totalQuestions}
+        </p>
+        <p className="text-xl text-gray-700">
+          Points: {score.earned} / {score.total}
         </p>
       </div>
     );
@@ -130,6 +161,14 @@ const StudentExam = () => {
 
   return (
     <div className="max-w-3xl mx-auto p-6">
+      <div className="mb-3 flex items-center gap-3">
+        <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+          Published Exam
+        </span>
+        <span className="text-sm text-gray-600">
+          Questions: {exam.questions?.length || 0}
+        </span>
+      </div>
       <h1 className="text-2xl font-bold mb-4">{exam.title}</h1>
 
       <div className="mb-6 text-red-600 font-bold">
@@ -139,9 +178,7 @@ const StudentExam = () => {
 
       {(exam.questions || []).map((q, qIndex) => (
         <div key={qIndex} className="border p-4 mb-4 rounded">
-          <h3 className="font-semibold mb-2">
-            {qIndex + 1}. {q.questionText}
-          </h3>
+          <h3 className="font-semibold mb-2">{qIndex + 1}. {q.questionText || 'Untitled question'}</h3>
 
           {q.options.map((opt, optIndex) => (
             <label key={optIndex} className="block">

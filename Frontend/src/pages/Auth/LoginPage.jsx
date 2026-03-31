@@ -6,6 +6,7 @@ import {
   FaExclamationTriangle, FaEye, FaEyeSlash
 } from 'react-icons/fa';
 import { useLanguage } from '../../contexts/LanguageContext';
+import { buildApiUrl } from '../../services/api';
 
 const translations = {
   english: {
@@ -235,7 +236,7 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
-      const { ok, status, data } = await safeFetchJson('/api/auth/login', {
+      const { ok, status, data } = await safeFetchJson(buildApiUrl('/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

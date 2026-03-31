@@ -5,6 +5,7 @@ import {
   FaPhone, FaLock, FaEye, FaEyeSlash, FaEnvelope,
   FaCheckCircle
 } from 'react-icons/fa';
+import { buildApiUrl } from '../../services/api';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -102,7 +103,7 @@ const Register = () => {
 
     setIsLoading(true);
     try {
-      const { ok, data } = await safeFetchJson('/api/auth/register-init', {
+      const { ok, data } = await safeFetchJson(buildApiUrl('/auth/register-init'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -137,7 +138,7 @@ const Register = () => {
 
     setIsLoading(true);
     try {
-      const { ok, data } = await safeFetchJson('/api/auth/verify-email', {
+      const { ok, data } = await safeFetchJson(buildApiUrl('/auth/verify-email'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

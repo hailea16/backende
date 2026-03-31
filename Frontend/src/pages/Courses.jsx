@@ -56,6 +56,14 @@ const Courses = () => {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {publishedExams.map((exam) => (
                 <div key={exam._id} className="bg-white rounded-xl shadow p-5 border border-gray-100">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+                      Published
+                    </span>
+                    <span className="text-xs font-medium text-gray-500">
+                      {exam.questions?.length || 0} Questions
+                    </span>
+                  </div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-1">{exam.title}</h3>
                   <p className="text-sm text-gray-600 mb-3">{exam.description || 'No description'}</p>
                   <div className="text-sm text-gray-500 mb-4 space-y-1">
@@ -104,7 +112,7 @@ const Courses = () => {
                     <FaClock className="ml-4 mr-2" />
                     <span>Self-paced</span>
                   </div>
-                  <button className="w-full btn-primary">Open Course</button>
+                  <div className="w-full btn-primary text-center">Open Course</div>
                 </div>
               </Link>
             ))}

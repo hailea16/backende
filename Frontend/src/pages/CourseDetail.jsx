@@ -32,6 +32,39 @@ const isDocumentFile = (file) => {
     mime.includes('text/plain');
 };
 
+const isDirectVideoUrl = (value) => {
+  if (!value || typeof value !== 'string') return false;
+  return /\.(mp4|mov|webm|m4v|avi|mkv)(\?.*)?$/i.test(value) || /^blob:|^data:video\//i.test(value);
+};
+
+const getEmbeddedVideoUrl = (value) => {
+  if (!value || typeof value !== 'string') return '';
+
+  try {
+    const url = new URL(value, window.location.origin);
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      const videoId = url.searchParams.get('v');
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
+    }
+
+    if (host === 'youtu.be') {
+      const videoId = url.pathname.replace(/\//g, '');
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
+    }
+
+    if (host === 'vimeo.com') {
+      const videoId = url.pathname.split('/').filter(Boolean)[0];
+      return videoId ? `https://player.vimeo.com/video/${videoId}` : '';
+    }
+  } catch (err) {
+    return '';
+  }
+
+  return '';
+};
+
 const getDocumentViewUrl = (file) => {
   const name = (file?.originalName || '').toLowerCase();
   const isOfficeDoc = ['.doc', '.docx', '.ppt', '.pptx'].some((ext) => name.endsWith(ext));
@@ -39,17 +72,8 @@ const getDocumentViewUrl = (file) => {
 
   if (isOfficeDoc && /^https:\/\//.test(url)) {
     try {
-      const parsed = new URL(url);
-      const host = parsed.hostname.toLowerCase();
-      const isLocalHost =
-        host === 'localhost' ||
-        host === '127.0.0.1' ||
-        host === '::1' ||
-        host.endsWith('.local');
-
-      if (!isLocalHost) {
-        return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`;
-      }
+      new URL(url);
+      return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`;
     } catch (err) {
       return url;
     }
@@ -73,7 +97,7 @@ const normalizeChapter = (chapter) => {
 };
 
 const CourseDetail = () => {
-  const { courseName: courseId } = useParams();
+  const { courseId } = useParams();
   const [course, setCourse] = useState(null);
   const [chapters, setChapters] = useState([]);
   const [selectedChapter, setSelectedChapter] = useState(null);
@@ -129,6 +153,11 @@ const CourseDetail = () => {
     return selectedChapter.files.filter((file) => !isVideoFile(file) && !isPdfFile(file) && !isImageFile(file) && !isDocumentFile(file));
   }, [selectedChapter]);
 
+  const embeddedVideoUrl = useMemo(
+    () => getEmbeddedVideoUrl(selectedChapter?.videoUrl || ''),
+    [selectedChapter]
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -179,10 +208,31 @@ const CourseDetail = () => {
                     <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
                       <FaVideo className="mr-2 text-blue-600" /> Chapter Video
                     </h3>
-                    <video controls className="w-full rounded bg-black">
-                      <source src={selectedChapter.videoUrl} />
-                      Your browser does not support the video tag.
-                    </video>
+                    {isDirectVideoUrl(selectedChapter.videoUrl) ? (
+                      <video controls className="w-full rounded bg-black">
+                        <source src={selectedChapter.videoUrl} />
+                        Your browser does not support the video tag.
+                      </video>
+                    ) : embeddedVideoUrl ? (
+                      <div className="aspect-video overflow-hidden rounded bg-black">
+                        <iframe
+                          src={embeddedVideoUrl}
+                          title={selectedChapter.title || 'Chapter video'}
+                          className="h-full w-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : (
+                      <a
+                        href={selectedChapter.videoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Open video
+                      </a>
+                    )}
                   </div>
                 )}
 

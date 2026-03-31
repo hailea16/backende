@@ -7,7 +7,7 @@ import {
   FaQuestionCircle, FaEye, FaCopy,
   FaFilePdf, FaFilePowerpoint, FaImage, FaVideo, FaFileWord
 } from 'react-icons/fa';
-import { adminAPI } from '../../services/api';
+import { adminAPI, resolveMediaUrl } from '../../services/api';
 import toast from 'react-hot-toast';
 import { useLanguage } from '../../contexts/LanguageContext';
 
@@ -61,6 +61,33 @@ const translations = {
     courseManagement: 'Maareynta Koorsooyinka'
   }
 };
+
+const normalizeExamQuestion = (question) => {
+  const options = Array.isArray(question?.options)
+    ? question.options
+    : Array.isArray(question?.choices)
+      ? question.choices
+      : [];
+
+  let correctAnswer = question?.correctAnswer;
+  if (typeof correctAnswer !== 'number') {
+    const parsedCorrectAnswer = Number(correctAnswer);
+    correctAnswer = Number.isInteger(parsedCorrectAnswer) ? parsedCorrectAnswer : 0;
+  }
+
+  return {
+    ...question,
+    questionText: question?.questionText || question?.question || question?.text || '',
+    options,
+    correctAnswer,
+    points: Number(question?.points) > 0 ? Number(question.points) : 1,
+  };
+};
+
+const normalizeExam = (exam) => ({
+  ...exam,
+  questions: Array.isArray(exam?.questions) ? exam.questions.map(normalizeExamQuestion) : [],
+});
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('users');
@@ -130,7 +157,7 @@ const AdminDashboard = () => {
   const [courseForm, setCourseForm] = useState({ title: '', description: '' });
   const [showChapterForm, setShowChapterForm] = useState(false);
   const [editingChapter, setEditingChapter] = useState(null);
-  const [chapterForm, setChapterForm] = useState({ title: '', textContent: '', videoUrl: '' });
+  const [chapterForm, setChapterForm] = useState({ title: '', textContent: '', videoUrl: '', isPublished: true });
   const [chapterFiles, setChapterFiles] = useState([]);
 
   const availableCourseTitles = Array.from(
@@ -168,16 +195,16 @@ const AdminDashboard = () => {
   const generateDummyChapters = (courseId) => {
     const dummyMap = {
       course1: [
-        { _id: 'chap1', title: 'Introduction to Algebra', content: 'Basic algebraic concepts...', videoUrl: '' },
-        { _id: 'chap2', title: 'Linear Equations', content: 'Solving linear equations...', videoUrl: '' }
+        { _id: 'chap1', title: 'Introduction to Algebra', content: 'Basic algebraic concepts...', videoUrl: '', isPublished: true },
+        { _id: 'chap2', title: 'Linear Equations', content: 'Solving linear equations...', videoUrl: '', isPublished: true }
       ],
       course2: [
-        { _id: 'chap3', title: 'Parts of Speech', content: 'Nouns, verbs, adjectives...', videoUrl: '' },
-        { _id: 'chap4', title: 'Tenses', content: 'Past, present, future...', videoUrl: '' }
+        { _id: 'chap3', title: 'Parts of Speech', content: 'Nouns, verbs, adjectives...', videoUrl: '', isPublished: true },
+        { _id: 'chap4', title: 'Tenses', content: 'Past, present, future...', videoUrl: '', isPublished: true }
       ],
       course3: [
-        { _id: 'chap5', title: 'Cell Structure', content: 'Organelles and their functions...', videoUrl: '' },
-        { _id: 'chap6', title: 'Photosynthesis', content: 'How plants make food...', videoUrl: '' }
+        { _id: 'chap5', title: 'Cell Structure', content: 'Organelles and their functions...', videoUrl: '', isPublished: true },
+        { _id: 'chap6', title: 'Photosynthesis', content: 'How plants make food...', videoUrl: '', isPublished: true }
       ]
     };
     return dummyMap[courseId] || [];
@@ -275,10 +302,13 @@ const AdminDashboard = () => {
 
   const normalizePhotoUrl = (value) => {
     if (!value || typeof value !== 'string') return '';
-    if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:') || value.startsWith('/')) {
+    if (value.startsWith('data:')) {
       return value;
     }
-    return `/uploads/${value}`;
+    if (value.startsWith('/uploads/')) {
+      return resolveMediaUrl(value);
+    }
+    return resolveMediaUrl(`/uploads/${value}`);
   };
 
   const getStudentPhotoSrc = (student) => {
@@ -315,9 +345,9 @@ const AdminDashboard = () => {
       setLoadingExams(true);
       const res = await adminAPI.getExams();
       const normalizedExams = Array.isArray(res.data)
-        ? res.data
+        ? res.data.map(normalizeExam)
         : Array.isArray(res.data?.exams)
-          ? res.data.exams
+          ? res.data.exams.map(normalizeExam)
           : [];
       setExams(normalizedExams);
     } catch (err) {
@@ -441,13 +471,29 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleViewExamDetails = async (exam) => {
+    try {
+      const res = await adminAPI.getExam(exam._id);
+      const payload = res?.data && !Array.isArray(res.data) ? res.data : exam;
+      setSelectedExamDetails(normalizeExam(payload));
+    } catch (err) {
+      setSelectedExamDetails(normalizeExam(exam));
+      toast.error(err.response?.data?.message || 'Failed to load full exam details');
+    }
+  };
+
   const handleEditExam = (exam) => {
     const normalizedQuestions =
       exam.questions && exam.questions.length > 0
-        ? exam.questions.map((q) => ({
-            ...q,
-            options: Array.isArray(q.options) ? [...q.options] : ['', '', '', '']
-          }))
+        ? exam.questions.map((q) => {
+            const normalizedQuestion = normalizeExamQuestion(q);
+            return {
+              ...normalizedQuestion,
+              options: Array.isArray(normalizedQuestion.options)
+                ? [...normalizedQuestion.options]
+                : ['', '', '', ''],
+            };
+          })
         : [{ questionText: '', options: ['', '', '', ''], correctAnswer: 0, points: 1 }];
 
     setEditingExam(exam);
@@ -578,7 +624,8 @@ const AdminDashboard = () => {
       const chapterData = {
         title: chapterForm.title,
         textContent: chapterForm.textContent,
-        videoUrl: chapterForm.videoUrl
+        videoUrl: chapterForm.videoUrl,
+        isPublished: !!chapterForm.isPublished
       };
 
       if (editingChapter) {
@@ -637,15 +684,39 @@ const AdminDashboard = () => {
     setChapterForm({
       title: chapter.title,
       textContent: chapter.content || chapter.textContent || '',
-      videoUrl: chapter.videoUrl || ''
+      videoUrl: chapter.videoUrl || '',
+      isPublished: chapter.isPublished !== false
     });
     setChapterFiles([]);
     setShowChapterForm(true);
   };
 
   const resetChapterForm = () => {
-    setChapterForm({ title: '', textContent: '', videoUrl: '' });
+    setChapterForm({ title: '', textContent: '', videoUrl: '', isPublished: true });
     setChapterFiles([]);
+  };
+
+  const handleTogglePublishChapter = async (chapter) => {
+    try {
+      const nextPublishedState = !chapter.isPublished;
+      const res = await adminAPI.updateChapter(chapter._id, {
+        title: chapter.title,
+        textContent: chapter.textContent || chapter.content || '',
+        videoUrl: chapter.videoUrl || '',
+        isPublished: nextPublishedState
+      });
+      const updatedChapter = res.data;
+      setChapters((prev) => prev.map((item) => (
+        item._id === chapter._id ? updatedChapter : item
+      )));
+      setSelectedChapterDetails((prev) => (
+        prev && prev._id === chapter._id ? updatedChapter : prev
+      ));
+      toast.success(nextPublishedState ? 'Chapter published' : 'Chapter unpublished');
+    } catch (err) {
+      console.error('Toggle chapter publish error:', err);
+      toast.error(err.response?.data?.message || 'Failed to update chapter publish status');
+    }
   };
 
   const handleFileChange = (e) => {
@@ -695,21 +766,12 @@ const AdminDashboard = () => {
   const getDocumentViewUrl = (file) => {
     const name = (file?.originalName || '').toLowerCase();
     const isOfficeDoc = ['.doc', '.docx', '.ppt', '.pptx'].some((ext) => name.endsWith(ext));
-    const url = file?.url || '';
+    const url = resolveMediaUrl(file?.url || '');
 
     if (isOfficeDoc && /^https:\/\//.test(url)) {
       try {
-        const parsed = new URL(url);
-        const host = parsed.hostname.toLowerCase();
-        const isLocalHost =
-          host === 'localhost' ||
-          host === '127.0.0.1' ||
-          host === '::1' ||
-          host.endsWith('.local');
-
-        if (!isLocalHost) {
-          return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`;
-        }
+        new URL(url);
+        return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`;
       } catch (err) {
         return url;
       }
@@ -1270,7 +1332,7 @@ const AdminDashboard = () => {
                             <FaEdit />
                           </button>
                           <button
-                            onClick={() => setSelectedExamDetails(exam)}
+                            onClick={() => handleViewExamDetails(exam)}
                             className="text-slate-600 hover:text-slate-800 p-1"
                             title="View Questions"
                           >
@@ -1516,6 +1578,17 @@ const AdminDashboard = () => {
                           />
                         </div>
                         <div className="mb-4">
+                          <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={!!chapterForm.isPublished}
+                              onChange={(e) => setChapterForm({ ...chapterForm, isPublished: e.target.checked })}
+                              className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                            />
+                            Publish this chapter for users
+                          </label>
+                        </div>
+                        <div className="mb-4">
                           <label className="block text-sm font-medium text-gray-700 mb-1">Upload Files (PDF, DOC, TXT, PPT, Images, Videos)</label>
                           <input
                             type="file"
@@ -1579,7 +1652,16 @@ const AdminDashboard = () => {
                       <div key={chapter._id} className="p-6 hover:bg-gray-50">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
-                            <h4 className="text-lg font-medium text-gray-900">{chapter.title}</h4>
+                            <div className="flex items-center gap-3">
+                              <h4 className="text-lg font-medium text-gray-900">{chapter.title}</h4>
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                  chapter.isPublished ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                }`}
+                              >
+                                {chapter.isPublished ? 'Published' : 'Draft'}
+                              </span>
+                            </div>
                             {chapter.videoUrl && (
                               <div className="mt-1 text-sm text-blue-600">
                                 <a href={chapter.videoUrl} target="_blank" rel="noopener noreferrer">Video Link</a>
@@ -1613,6 +1695,13 @@ const AdminDashboard = () => {
                               <FaEdit />
                             </button>
                             <button
+                              onClick={() => handleTogglePublishChapter(chapter)}
+                              className={chapter.isPublished ? 'text-yellow-600 hover:text-yellow-800' : 'text-green-600 hover:text-green-800'}
+                              title={chapter.isPublished ? 'Unpublish chapter' : 'Publish chapter'}
+                            >
+                              <FaCheckCircle />
+                            </button>
+                            <button
                               onClick={() => handleDeleteChapter(chapter._id)}
                               className="text-red-600 hover:text-red-800"
                               title="Delete"
@@ -1625,6 +1714,74 @@ const AdminDashboard = () => {
                     ))
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedExamDetails && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">{selectedExamDetails.title}</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {selectedExamDetails.questions?.length || 0} questions
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedExamDetails(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                  title="Close"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {selectedExamDetails.description ? (
+                  <p className="text-sm text-gray-600">{selectedExamDetails.description}</p>
+                ) : null}
+
+                {!selectedExamDetails.questions?.length ? (
+                  <div className="text-gray-500">No questions added yet.</div>
+                ) : (
+                  selectedExamDetails.questions.map((question, index) => (
+                    <div key={`${selectedExamDetails._id}-${index}`} className="border rounded-lg p-4 bg-gray-50">
+                      <div className="flex items-start justify-between gap-4">
+                        <h4 className="font-semibold text-gray-900">
+                          Question {index + 1}
+                        </h4>
+                        <span className="text-xs font-medium text-gray-500">
+                          {Number(question?.points) > 0 ? Number(question.points) : 1} point(s)
+                        </span>
+                      </div>
+
+                      <p className="mt-2 text-gray-800 whitespace-pre-line">
+                        {question?.questionText || question?.question || 'No question text provided.'}
+                      </p>
+
+                      <div className="mt-4 space-y-2">
+                        {(Array.isArray(question?.options) ? question.options : []).map((option, optionIndex) => (
+                          <div
+                            key={optionIndex}
+                            className={`rounded border px-3 py-2 text-sm ${
+                              question?.correctAnswer === optionIndex
+                                ? 'border-green-300 bg-green-50 text-green-800'
+                                : 'border-gray-200 bg-white text-gray-700'
+                            }`}
+                          >
+                            <span className="font-medium mr-2">{String.fromCharCode(65 + optionIndex)}.</span>
+                            <span>{option || `Option ${optionIndex + 1}`}</span>
+                            {question?.correctAnswer === optionIndex ? (
+                              <span className="ml-2 text-xs font-semibold">Correct</span>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -1644,6 +1801,15 @@ const AdminDashboard = () => {
                 </button>
               </div>
               <div className="p-6 space-y-6">
+                <div>
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                      selectedChapterDetails.isPublished ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                    }`}
+                  >
+                    {selectedChapterDetails.isPublished ? 'Published for users' : 'Hidden from users'}
+                  </span>
+                </div>
                 {(selectedChapterDetails.textContent || selectedChapterDetails.content) ? (
                   <p className="text-gray-700 whitespace-pre-line">
                     {selectedChapterDetails.textContent || selectedChapterDetails.content}

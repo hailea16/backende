@@ -7,11 +7,13 @@ export default defineConfig({
     port: 4000,
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        // target: 'http://:5000',
+        target: 'https://backende-su97.onrender.com',
         changeOrigin: true,
       },
       '/uploads': {
-        target: 'http://localhost:5000',
+        // target: 'http://localhost:5000',
+        target: 'https://backende-su97.onrender.com',
         changeOrigin: true,
       }
     }

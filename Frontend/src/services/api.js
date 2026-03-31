@@ -1,8 +1,18 @@
 import axios from 'axios';
 
+const DEFAULT_API_BASE_URL = 'https://backende-su97.onrender.com';
+
+const normalizeBaseUrl = (value) => {
+  if (!value) return '';
+  return value.replace(/\/+$/, '');
+};
+
+const API_BASE_URL = normalizeBaseUrl(import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL);
+const API_PREFIX = API_BASE_URL ? `${API_BASE_URL}/api` : '/api';
+const UPLOADS_PREFIX = API_BASE_URL || '';
 
 const API = axios.create({
-  baseURL: '/api'
+  baseURL: API_PREFIX
 });
 
 const getApiOrigin = () => {
@@ -17,12 +27,7 @@ const getApiOrigin = () => {
   }
 
   if (typeof window === 'undefined') return '';
-
-  if (window.location.port === '4000') {
-    return 'http://localhost:5000';
-  }
-
-  return window.location.origin;
+  return API_BASE_URL || window.location.origin;
 };
 
 export const resolveMediaUrl = (value) => {
@@ -30,10 +35,15 @@ export const resolveMediaUrl = (value) => {
   if (/^(data:|blob:)/i.test(value)) return value;
 
   try {
-    return new URL(value, getApiOrigin() || window.location.origin).toString();
+    return new URL(value, UPLOADS_PREFIX || getApiOrigin() || window.location.origin).toString();
   } catch (error) {
     return value;
   }
+};
+
+export const buildApiUrl = (path) => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_PREFIX}${normalizedPath}`;
 };
 
 API.interceptors.request.use((config) => {
