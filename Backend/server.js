@@ -19,7 +19,7 @@ const app = express();
 const allowedOrigins = Array.from(
   new Set(
     [
-
+      
       'https://www.nssse.edu.et',
       process.env.FRONTEND_URL,
       ...(process.env.FRONTEND_URLS || '')

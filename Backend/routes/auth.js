@@ -8,6 +8,10 @@ const transporter = require('../config/transporter');
 
 // ---------- Helper: send verification email ----------
 const sendVerificationEmail = async (to, code) => {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    throw new Error('Email transport is not configured');
+  }
+
   const mailOptions = {
     from: `"NDS Education" <${process.env.EMAIL_USER}>`,
     to,
@@ -38,38 +42,62 @@ router.post('/register-init', async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
 
-    const existing = await User.findOne({ where: { [Op.or]: [{ email }, { username }] } });
-    if (existing) return res.status(400).json({ message: 'Email or username already registered' });
-
     const verificationCode = crypto.randomInt(100000, 999999).toString();
+    const verificationExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    const existing = await User.findOne({ where: { [Op.or]: [{ email }, { username }] } });
 
-    const user = new User({
-      name,
-      sex,
-      age,
-      grade,
-      phoneNumber,
-      email,
-      username,
-      password,
-      emailVerified: false,
-      emailVerificationCode: verificationCode,
-      emailVerificationExpires: new Date(Date.now() + 10 * 60 * 1000),
-      isApproved: false,
-      isAdmin: false,
-      loginAttempts: 0,
-    });
+    let user;
+
+    if (existing) {
+      if (existing.emailVerified || existing.isApproved) {
+        return res.status(400).json({ message: 'Email or username already registered' });
+      }
+
+      existing.name = name;
+      existing.sex = sex;
+      existing.age = age;
+      existing.grade = grade;
+      existing.phoneNumber = phoneNumber;
+      existing.email = email;
+      existing.username = username;
+      existing.password = password;
+      existing.emailVerified = false;
+      existing.emailVerificationCode = verificationCode;
+      existing.emailVerificationExpires = verificationExpiry;
+      existing.isApproved = false;
+      existing.isAdmin = false;
+      existing.loginAttempts = 0;
+      existing.lockUntil = null;
+      user = existing;
+    } else {
+      user = new User({
+        name,
+        sex,
+        age,
+        grade,
+        phoneNumber,
+        email,
+        username,
+        password,
+        emailVerified: false,
+        emailVerificationCode: verificationCode,
+        emailVerificationExpires: verificationExpiry,
+        isApproved: false,
+        isAdmin: false,
+        loginAttempts: 0,
+      });
+    }
 
     await user.save();
     await sendVerificationEmail(email, verificationCode);
 
     res.status(201).json({
       message: 'Verification code sent to email',
-      userId: user._id,
+      userId: user.id,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('register-init error:', error);
+    res.status(500).json({ message: 'Unable to send verification email right now' });
   }
 });
 
@@ -156,7 +184,7 @@ router.post('/login', async (req, res) => {
     if (!user.isApproved) return res.status(403).json({ message: 'Account pending admin approval' });
 
     const token = jwt.sign(
-      { id: user._id, role: user.isAdmin ? 'admin' : 'student' },
+      { id: user.id, role: user.isAdmin ? 'admin' : 'student' },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -168,7 +196,7 @@ router.post('/login', async (req, res) => {
       message: 'Login successful',
       token,
       user: {
-        id: user._id,
+        id: user.id,
         name: user.name,
         username: user.username,
         email: user.email,
@@ -204,7 +232,7 @@ router.get('/check-approval/:identifier', async (req, res) => {
       message = 'Your account is approved.';
     }
 
-    res.json({ status, message, userId: user._id });
+    res.json({ status, message, userId: user.id });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
