@@ -1,5 +1,7 @@
 const { Sequelize } = require('sequelize');
 
+const firstDefined = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
+
 const inferDialect = (databaseUrl) => {
   if (process.env.DB_DIALECT) {
     return process.env.DB_DIALECT;
@@ -43,7 +45,7 @@ const buildDialectOptions = () => {
 };
 
 const buildSequelize = () => {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = firstDefined(process.env.DATABASE_URL, process.env.MYSQL_ADDON_URI);
   const dialect = inferDialect(databaseUrl);
   const logging =
     process.env.NODE_ENV === 'development' ? (msg) => console.log(msg) : false;
@@ -58,11 +60,38 @@ const buildSequelize = () => {
   }
 
   const isPostgres = dialect === 'postgres';
-  const database = process.env.DB_NAME || process.env.PGDATABASE || 'nds';
-  const username = process.env.DB_USER || process.env.PGUSER || 'root';
-  const password = process.env.DB_PASSWORD || process.env.PGPASSWORD || '';
-  const host = process.env.DB_HOST || process.env.PGHOST || 'localhost';
-  const port = Number(process.env.DB_PORT || process.env.PGPORT || (isPostgres ? 5432 : 3306));
+  const database = firstDefined(
+    process.env.DB_NAME,
+    process.env.PGDATABASE,
+    process.env.MYSQL_ADDON_DB,
+    'nds',
+  );
+  const username = firstDefined(
+    process.env.DB_USER,
+    process.env.PGUSER,
+    process.env.MYSQL_ADDON_USER,
+    'root',
+  );
+  const password = firstDefined(
+    process.env.DB_PASSWORD,
+    process.env.PGPASSWORD,
+    process.env.MYSQL_ADDON_PASSWORD,
+    '',
+  );
+  const host = firstDefined(
+    process.env.DB_HOST,
+    process.env.PGHOST,
+    process.env.MYSQL_ADDON_HOST,
+    'localhost',
+  );
+  const port = Number(
+    firstDefined(
+      process.env.DB_PORT,
+      process.env.PGPORT,
+      process.env.MYSQL_ADDON_PORT,
+      isPostgres ? 5432 : 3306,
+    ),
+  );
 
   return new Sequelize(database, username, password, {
     host,
